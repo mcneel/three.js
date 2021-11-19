@@ -21,7 +21,8 @@ import {
 	CanvasTexture,
 	LinearFilter,
 	ClampToEdgeWrapping,
-	TextureLoader
+	TextureLoader,
+	MeshPhysicalMaterial
 } from '../../../build/three.module.js';
 
 const _taskCache = new WeakMap();
@@ -239,15 +240,33 @@ class Rhino3dmLoader extends Loader {
 
 		}
 
-		// console.log( material );
+		let mat = null;
 
-		const mat = new MeshStandardMaterial( {
-			color: diffusecolor,
-			name: material.name,
-			side: 2,
-			transparent: material.transparency > 0 ? true : false,
-			opacity: 1.0 - material.transparency
-		} );
+		if ( material.supported ) {
+
+			console.log( material );
+
+			mat = new MeshPhysicalMaterial( {
+
+				roughness: material.roughness,
+				metalness: material.metallic,
+				clearcoat: material.clearcoat,
+				clearcoatRoughness: material.clearcoatRoughness,
+				transmission: material.subsurface
+
+			} );
+
+		} else {
+
+			mat = new MeshStandardMaterial();
+
+		}
+
+		mat.color = diffusecolor;
+		mat.name = material.name;
+		mat.side = 2;
+		mat.transparent = material.transparency > 0 ? true : false;
+		mat.opacity = 1.0 - material.transparency;
 
 		const textureLoader = new TextureLoader();
 
@@ -261,6 +280,7 @@ class Rhino3dmLoader extends Loader {
 
 				switch ( texture.type ) {
 
+					case 'PBR_BaseColor':
 					case 'Diffuse':
 
 						mat.map = map;
@@ -286,11 +306,56 @@ class Rhino3dmLoader extends Loader {
 
 						break;
 
+					case 'PBR_Metallic':
+
+						mat.metalnessMap = map;
+
+						break;
+
+					case 'PBR_Roughness':
+
+						mat.roughnessMap = map;
+
+						break;
+
+					case 'PBR_Displacement':
+
+						mat.displacementMap = map;
+
+						break;
+
+					case 'PBR_AmbientOcclusion':
+
+						mat.aoMap = map;
+
+						break;
+
+					case 'PBR_Emission':
+
+						mat.emissiveMap = map;
+
+						break;
+
+					case 'PBR_ClearcoatBump':
+
+						mat.clearcoatNormalMap = map;
+
+						break;
+
+					default:
+						console.warn( `THREE.3DMLoader: ${texture.type} map not supported.` );
+						break;
+
 				}
 
 				map.wrapS = texture.wrapU === 0 ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 				map.wrapT = texture.wrapV === 0 ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
-				map.repeat.set( texture.repeat[ 0 ], texture.repeat[ 1 ] );
+
+				if ( map.hasOwnProperty( 'repeat' ) ) {
+
+					map.repeat.set( texture.repeat[ 0 ], texture.repeat[ 1 ] );
+
+				}
 
 			}
 
@@ -437,6 +502,7 @@ class Rhino3dmLoader extends Loader {
 		}
 
 		object.userData[ 'materials' ] = this.materials;
+		object.rotation.x = - Math.PI / 2;
 		return object;
 
 	}
@@ -1007,6 +1073,13 @@ function Rhino3dmWorker() {
 						let textureType = pbrTextureTypes[ j ].constructor.name;
 						textureType = textureType.substring( 12, textureType.length );
 						const texture = { type: textureType, image: 'data:image/png;base64,' + image };
+
+						texture.wrapU = _texture.wrapU;
+						texture.wrapV = _texture.wrapV;
+						texture.wrapW = _texture.wrapW;
+						const uvw = _texture.uvwTransform.toFloatArray( true );
+						texture.repeat = [ uvw[ 0 ], uvw[ 5 ] ];
+
 						textures.push( texture );
 
 						_texture.delete();
