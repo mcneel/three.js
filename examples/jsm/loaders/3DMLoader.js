@@ -1021,10 +1021,12 @@ function Rhino3dmWorker() {
 			for ( let j = 0; j < textureTypes.length; j ++ ) {
 
 				const _texture = _material.getTexture( textureTypes[ j ] );
+
 				if ( _texture ) {
 
 					let textureType = textureTypes[ j ].constructor.name;
 					textureType = textureType.substring( 12, textureType.length );
+
 					const texture = { type: textureType };
 
 					const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
@@ -1053,26 +1055,24 @@ function Rhino3dmWorker() {
 					}
 
 					textures.push( texture );
-
 					_texture.delete();
 
 				}
 
 			}
 
-			material.textures = textures;
-
 			if ( _pbrMaterial.supported ) {
 
 				for ( let j = 0; j < pbrTextureTypes.length; j ++ ) {
 
 					const _texture = _material.getTexture( pbrTextureTypes[ j ] );
+
 					if ( _texture ) {
 
-						const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
 						let textureType = pbrTextureTypes[ j ].constructor.name;
 						textureType = textureType.substring( 12, textureType.length );
-						const texture = { type: textureType, image: 'data:image/png;base64,' + image };
+
+						const texture = { type: textureType };
 
 						texture.wrapU = _texture.wrapU;
 						texture.wrapV = _texture.wrapV;
@@ -1080,8 +1080,27 @@ function Rhino3dmWorker() {
 						const uvw = _texture.uvwTransform.toFloatArray( true );
 						texture.repeat = [ uvw[ 0 ], uvw[ 5 ] ];
 
-						textures.push( texture );
+						const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
 
+						if ( image ) {
+
+							texture.image = 'data:image/png;base64,' + image;
+
+						} else {
+
+							self.postMessage( { type: 'warning', id: taskID, data: {
+								message: `THREE.3DMLoader: Image for ${textureType} texture not embedded in file.`,
+								type: 'missing resource'
+							}
+
+							} );
+
+							texture.image = null;
+
+						}
+
+
+						textures.push( texture );
 						_texture.delete();
 
 					}
@@ -1093,6 +1112,8 @@ function Rhino3dmWorker() {
 				material = Object.assign( pbMaterialProperties, material );
 
 			}
+
+			material.textures = textures;
 
 			materials.push( material );
 
@@ -1181,6 +1202,39 @@ function Rhino3dmWorker() {
 		doc.delete();
 
 		return { objects, materials, layers, views, namedViews, groups, strings, settings };
+
+	}
+
+	function extractTexture( _texture, textureType ) {
+
+		const texture = { type: textureType };
+
+		const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
+
+		texture.wrapU = _texture.wrapU;
+		texture.wrapV = _texture.wrapV;
+		texture.wrapW = _texture.wrapW;
+		const uvw = _texture.uvwTransform.toFloatArray( true );
+		texture.repeat = [ uvw[ 0 ], uvw[ 5 ] ];
+
+		if ( image ) {
+
+			texture.image = 'data:image/png;base64,' + image;
+
+		} else {
+
+			self.postMessage( { type: 'warning', id: taskID, data: {
+				message: `THREE.3DMLoader: Image for ${textureType} texture not embedded in file.`,
+				type: 'missing resource'
+			}
+
+			} );
+
+			texture.image = null;
+
+		}
+
+		return texture;
 
 	}
 
