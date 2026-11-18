@@ -476,7 +476,7 @@ class Collector {
 		if ( parts.length === 0 ) return;
 
 		const block = this.data.blocks.length;
-		this.data.blocks.push( { name: unique( object.name || 'InstancedMesh', this.blockNames ), buffers, parts } );
+		this.data.blocks.push( { name: unique( object.name || 'InstancedMesh', this.blockNames ), layer: this.attributes( object ).layer, buffers, parts } );
 
 		const instanceMatrix = new Matrix4();
 		const matrix = new Matrix4();
@@ -558,7 +558,7 @@ class Collector {
 		const buffers = this.meshBuffers( object, new Matrix4(), false, range.vertexStart, range.vertexCount );
 		const name = unique( `${ object.name || 'BatchedMesh' }_${ geometryId }`, this.blockNames );
 
-		this.data.blocks.push( { name, buffers, parts: [ { index: partIndex, material: this.materialIndex( material ) } ] } );
+		this.data.blocks.push( { name, layer: this.attributes( object ).layer, buffers, parts: [ { index: partIndex, material: this.materialIndex( material ) } ] } );
 
 		return this.data.blocks.length - 1;
 
@@ -1204,7 +1204,9 @@ function write3dm( rhino, data ) {
 				const mesh = createMesh( block.buffers, part.index );
 				if ( mesh === null ) continue;
 
+				// the block's geometry is on the layer of its references
 				const a = new rhino.ObjectAttributes();
+				a.layerIndex = block.layer;
 				a.materialSource = rhino.ObjectMaterialSource.MaterialFromObject;
 				a.materialIndex = part.material;
 

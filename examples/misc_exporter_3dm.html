@@ -31,6 +31,9 @@
 
 			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 			import { Rhino3dmExporter } from 'three/addons/exporters/3DMExporter.js';
+			import { Line2 } from 'three/addons/lines/Line2.js';
+			import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+			import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 			let camera, scene, renderer;
@@ -56,21 +59,37 @@
 
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
 				camera.name = 'Camera';
-				camera.position.set( 6, 5, 9 );
+				camera.position.set( 7, 6, 11 );
 				scene.add( camera ); // exported as a named view
 
-				scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
+				// one group per object type: each group becomes a Rhino layer
+
+				const layer = ( name ) => {
+
+					const group = new THREE.Group();
+					group.name = name;
+					scene.add( group );
+					return group;
+
+				};
+
+				const lights = layer( 'Lights' );
+				const shapes = layer( 'Meshes' );
+				const lines = layer( 'Lines' );
+				const pointClouds = layer( 'Points' );
+				const batches = layer( 'Batched meshes' );
+				const wideLines = layer( 'Wide lines' );
+
+				const ambient = new THREE.AmbientLight( 0xffffff, 0.5 );
+				ambient.name = 'Ambient';
+				lights.add( ambient );
 
 				const light = new THREE.DirectionalLight( 0xffffff, 2.5 );
 				light.name = 'Sun';
 				light.position.set( 3, 6, 4 );
-				scene.add( light );
+				lights.add( light );
 
-				// meshes, in a group: the group becomes a layer
-
-				const shapes = new THREE.Group();
-				shapes.name = 'Shapes';
-				scene.add( shapes );
+				// meshes
 
 				const knot = new THREE.Mesh(
 					new THREE.TorusKnotGeometry( 0.8, 0.3, 128, 16 ),
@@ -111,12 +130,12 @@
 				const helix = new THREE.Line( new THREE.BufferGeometry().setFromPoints( helixPoints ), new THREE.LineBasicMaterial( { color: 0xd02020 } ) );
 				helix.name = 'Helix';
 				helix.position.set( 0, 0, - 2.5 );
-				scene.add( helix );
+				lines.add( helix );
 
 				const edges = new THREE.LineSegments( new THREE.EdgesGeometry( box.geometry ), new THREE.LineBasicMaterial( { color: 0xe0e0e0 } ) );
 				edges.name = 'Box edges';
 				edges.position.copy( box.position ).add( new THREE.Vector3( 0, 0, 2.5 ) );
-				scene.add( edges );
+				lines.add( edges );
 
 				// points with colors
 
@@ -139,7 +158,44 @@
 
 				const points = new THREE.Points( pointsGeometry, new THREE.PointsMaterial( { size: 0.08, vertexColors: true } ) );
 				points.name = 'Spiral';
-				scene.add( points );
+				pointClouds.add( points );
+
+				// a batched mesh: each geometry becomes a block, each instance a block reference
+
+				const batch = new THREE.BatchedMesh( 7, 2000, 4000, new THREE.MeshStandardMaterial( { name: 'Batch', color: 0xc04080, roughness: 0.5 } ) );
+				batch.name = 'Batch';
+				batch.position.set( 0, 0.4, - 5 );
+				batches.add( batch );
+
+				const batchGeometries = [
+					batch.addGeometry( new THREE.BoxGeometry( 0.7, 0.7, 0.7 ) ),
+					batch.addGeometry( new THREE.SphereGeometry( 0.4, 24, 12 ) ),
+					batch.addGeometry( new THREE.ConeGeometry( 0.4, 0.8, 24 ) )
+				];
+
+				const matrix = new THREE.Matrix4();
+
+				for ( let i = 0; i < 7; i ++ ) {
+
+					const instance = batch.addInstance( batchGeometries[ i % 3 ] );
+					batch.setMatrixAt( instance, matrix.makeRotationY( i * 0.4 ).setPosition( ( i - 3 ) * 1.2, 0, 0 ) );
+
+				}
+
+				// a wide line: its width in pixels becomes the plot weight
+
+				const wavePositions = [];
+
+				for ( let i = 0; i <= 100; i ++ ) {
+
+					const x = i / 100 * 7 - 3.5;
+					wavePositions.push( x, 0.3 + Math.sin( x * 2 ) * 0.3, 4.5 );
+
+				}
+
+				const wave = new Line2( new LineGeometry().setPositions( wavePositions ), new LineMaterial( { color: 0x20b0d0, linewidth: 4 } ) );
+				wave.name = 'Wave';
+				wideLines.add( wave );
 
 				//
 
