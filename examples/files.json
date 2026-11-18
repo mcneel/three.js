@@ -619,6 +619,7 @@
 		"misc_controls_pointerlock",
 		"misc_controls_trackball",
 		"misc_controls_transform",
+		"misc_exporter_3dm",
 		"misc_exporter_draco",
 		"misc_exporter_gcode",
 		"misc_exporter_gltf",

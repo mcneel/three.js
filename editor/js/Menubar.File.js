@@ -231,6 +231,23 @@ function MenubarFile( editor ) {
 	const fileExportSubmenu = new UIPanel().setPosition( 'fixed' ).addClass( 'options' ).setDisplay( 'none' );
 	fileExportSubmenuTitle.add( fileExportSubmenu );
 
+	// Export 3DM
+
+	option = new UIRow();
+	option.setClass( 'option' );
+	option.setTextContent( '3DM' );
+	option.onClick( async function () {
+
+		const { Rhino3dmExporter } = await import( 'three/addons/exporters/3DMExporter.js' );
+
+		const exporter = new Rhino3dmExporter();
+		exporter.setLibraryPath( 'https://cdn.jsdelivr.net/npm/rhino3dm@9.2.0-beta.1/' );
+
+		saveArrayBuffer( await exporter.parseAsync( editor.scene, { rotateFromYUp: true } ), 'model.3dm' );
+
+	} );
+	fileExportSubmenu.add( option );
+
 	// Export DRC
 
 	option = new UIRow();
