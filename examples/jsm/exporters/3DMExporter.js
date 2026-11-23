@@ -203,6 +203,12 @@ class Rhino3dmExporter {
 
 				this.worker.postMessage( { type: 'init', wasmBinary: binaryContent } );
 
+			} ).catch( ( error ) => {
+
+				// a failed load (a wrong library path) is tried again on the next export
+				this.workerPending = null;
+				throw error;
+
 			} );
 
 		}
@@ -230,11 +236,12 @@ class Collector {
 		this.layerIndices = new Map(); // Object3D -> layer index
 		this.layerNames = new Map(); // parent layer index -> Set of child names
 		this.materialIndices = new Map(); // material uuid -> material index
+		this.fileGroups = new Map(); // Rhino3dmLoader group index -> group index
 		this.blockNames = new Set();
 		this.viewNames = new Set();
 		this.warnings = new Set();
 
-		this.data = { version: options.version, units: options.units, images: [], layers: [], materials: [], groups: 0, blocks: [], objects: [], views: [] };
+		this.data = { version: options.version, units: options.units, images: [], layers: [], materials: [], groups: 0, blocks: [], objects: [], views: [], strings: [] };
 		this.transfer = [];
 
 	}
@@ -273,6 +280,9 @@ class Collector {
 		this.root = input;
 
 		if ( input.userData.objectType === 'File3dm' && Array.isArray( input.userData.layers ) ) this.collectFileLayers( input.userData.layers );
+
+		// the document's user strings, as Rhino3dmLoader reads them: [ key, value ] pairs
+		if ( input.userData.objectType === 'File3dm' && Array.isArray( input.userData.strings ) ) this.data.strings = userStringPairs( input.userData.strings );
 
 		if ( input.isScene && input.background !== null ) {
 
@@ -474,6 +484,8 @@ class Collector {
 		const parts = this.meshParts( object ).map( ( part ) => ( { index: part.index, material: this.materialIndex( part.material ) } ) );
 
 		if ( parts.length === 0 ) return;
+
+		if ( object.instanceColor !== null ) this.warn( 'InstancedMesh instance colors are not written.' );
 
 		const block = this.data.blocks.length;
 		this.data.blocks.push( { name: unique( object.name || 'InstancedMesh', this.blockNames ), layer: this.attributes( object ).layer, buffers, parts } );
@@ -877,7 +889,41 @@ class Collector {
 
 		}
 
+		// what Rhino3dmLoader read from the file: the object's user strings, its geometry's, and its groups
+		const fileAttributes = object.userData.objectType !== undefined ? object.userData.attributes : undefined;
+
+		if ( fileAttributes !== undefined && fileAttributes !== null ) {
+
+			attributes.userStrings.push( ...userStringPairs( fileAttributes.userStrings ) );
+
+			if ( fileAttributes.geometry !== undefined && fileAttributes.geometry !== null ) {
+
+				attributes.geometryUserStrings = userStringPairs( fileAttributes.geometry.userStrings );
+
+			}
+
+			for ( const id of listOf( fileAttributes.groupIds ) ) attributes.groups.push( this.fileGroup( id ) );
+
+		}
+
 		return attributes;
+
+	}
+
+	// A group of the file read by Rhino3dmLoader: its objects stay together, in a new group (names are not written).
+
+	fileGroup( id ) {
+
+		let group = this.fileGroups.get( id );
+
+		if ( group === undefined ) {
+
+			group = this.data.groups ++;
+			this.fileGroups.set( id, group );
+
+		}
+
+		return group;
 
 	}
 
@@ -1194,6 +1240,8 @@ function write3dm( rhino, data ) {
 
 		for ( let i = 0; i < data.groups; i ++ ) groups.addGroup();
 
+		for ( const [ key, value ] of data.strings ) doc.strings.setString( key, value );
+
 		// blocks: each holds its meshes, one per material
 		const blocks = data.blocks.map( ( block ) => {
 
@@ -1427,6 +1475,12 @@ function write3dm( rhino, data ) {
 
 		function add( geometry, values ) {
 
+			if ( values.geometryUserStrings !== undefined ) {
+
+				for ( const [ key, value ] of values.geometryUserStrings ) geometry.setUserString( key, value );
+
+			}
+
 			const a = attributes( values );
 			objects.add( geometry, a );
 			geometry.delete();
@@ -1619,6 +1673,20 @@ function createCanvas( width, height ) {
 	canvas.height = height;
 
 	return canvas;
+
+}
+
+// An array, or a typed array, as an array; anything else as an empty one.
+function listOf( value ) {
+
+	return Array.isArray( value ) || ArrayBuffer.isView( value ) ? Array.from( value ) : [];
+
+}
+
+// User strings as Rhino3dmLoader reads them, [ key, value ] pairs, as strings.
+function userStringPairs( pairs ) {
+
+	return listOf( pairs ).filter( ( pair ) => listOf( pair ).length === 2 ).map( ( pair ) => [ String( pair[ 0 ] ), String( pair[ 1 ] ) ] );
 
 }
 
